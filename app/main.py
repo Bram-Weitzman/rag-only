@@ -1,0 +1,173 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+from uuid import uuid4
+import os
+import math
+import httpx
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+
+# --- env ---
+QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant:6333")
+QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY")  # optional
+COLLECTION = os.environ.get("QDRANT_COLLECTION", "docs")
+EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434").rstrip("/")
+
+# --- FastAPI ---
+app = FastAPI(title="RAG-only API", version="1.0")
+
+# --- Qdrant client ---
+client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+
+# --- helpers ---
+async def embed_texts(texts: List[str]) -> List[List[float]]:
+    """Call Ollama embeddings endpoint once for a batch of texts."""
+    # Ollama embeddings API (2025): POST /api/embeddings {model, input}
+    payload = {"model": EMBED_MODEL, "input": texts}
+    async with httpx.AsyncClient(timeout=60) as http:
+        r = await http.post(f"{OLLAMA_HOST}/api/embeddings", json=payload)
+        if r.status_code != 200:
+            raise HTTPException(502, f"Ollama embed error: {r.text[:200]}")
+        data = r.json()
+        # shape can be {"embeddings":[...]} or {"data":[{"embedding":[...]}...]} depending on version
+        if "embeddings" in data:
+            return data["embeddings"]
+        elif "data" in data:
+            return [d["embedding"] for d in data["data"]]
+        else:
+            raise HTTPException(502, "Unexpected Ollama embeddings response")
+
+def ensure_collection(vector_size: int):
+    exists = client.collection_exists(COLLECTION)
+    if not exists:
+        client.recreate_collection(
+            collection_name=COLLECTION,
+            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+        )
+        # optional: create payload index for filters
+        client.create_payload_index(COLLECTION, field_name="doc_id", field_schema="keyword")
+        client.create_payload_index(COLLECTION, field_name="source", field_schema="keyword")
+
+def chunk_text(text: str, max_tokens: int = 400, overlap: int = 60) -> List[str]:
+    # naive token-ish chunking by words; works fine for many cases
+    words = text.split()
+    if not words:
+        return []
+    step = max_tokens - overlap
+    if step <= 0:
+        step = max_tokens
+    chunks = []
+    for i in range(0, len(words), step):
+        chunk = " ".join(words[i:i + max_tokens])
+        if chunk:
+            chunks.append(chunk)
+    return chunks
+
+# --- models ---
+class IngestItem(BaseModel):
+    text: str
+    doc_id: Optional[str] = None
+    source: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    chunk_size: int = 400
+    chunk_overlap: int = 60
+
+class IngestRequest(BaseModel):
+    items: List[IngestItem]
+
+class IngestResponse(BaseModel):
+    inserted_points: int
+
+class QueryRequest(BaseModel):
+    query: str = Field(..., description="User's query")
+    top_k: int = 5
+    filter_by_source: Optional[str] = None
+    filter_by_doc_id: Optional[str] = None
+
+class RetrievedChunk(BaseModel):
+    text: str
+    score: float
+    doc_id: Optional[str] = None
+    source: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+class QueryResponse(BaseModel):
+    chunks: List[RetrievedChunk]
+
+# --- startup: infer vector size once via a tiny embed ---
+@app.on_event("startup")
+async def startup():
+    vec = await embed_texts(["ping"])
+    dim = len(vec[0])
+    ensure_collection(dim)
+
+# --- routes ---
+@app.post("/ingest", response_model=IngestResponse)
+async def ingest(req: IngestRequest):
+    texts = []
+    payloads = []
+    ids = []
+    # build chunks
+    for item in req.items:
+        base_doc_id = item.doc_id or str(uuid4())
+        chunks = chunk_text(item.text, item.chunk_size, item.chunk_overlap)
+        for idx, chunk in enumerate(chunks):
+            texts.append(chunk)
+            payloads.append({
+                "doc_id": base_doc_id,
+                "source": item.source,
+                "metadata": item.metadata or {},
+                "chunk_ix": idx
+            })
+            ids.append(f"{base_doc_id}-{idx}")
+    if not texts:
+        return IngestResponse(inserted_points=0)
+
+    # embed and upsert
+    vectors = await embed_texts(texts)
+    points = [
+        PointStruct(id=ids[i], vector=vectors[i], payload={**payloads[i], "text": texts[i]})
+        for i in range(len(texts))
+    ]
+    client.upsert(collection_name=COLLECTION, points=points)
+    return IngestResponse(inserted_points=len(points))
+
+@app.post("/query", response_model=QueryResponse)
+async def query(req: QueryRequest):
+    qvec = (await embed_texts([req.query]))[0]
+
+    flt = None
+    conditions = []
+    if req.filter_by_source:
+        conditions.append(FieldCondition(key="source", match=MatchValue(value=req.filter_by_source)))
+    if req.filter_by_doc_id:
+        conditions.append(FieldCondition(key="doc_id", match=MatchValue(value=req.filter_by_doc_id)))
+    if conditions:
+        flt = Filter(must=conditions)
+
+    result = client.search(
+        collection_name=COLLECTION,
+        query_vector=qvec,
+        limit=max(1, min(req.top_k, 50)),
+        with_payload=True,
+        score_threshold=None,
+        query_filter=flt
+    )
+
+    chunks = []
+    for r in result:
+        p = r.payload or {}
+        chunks.append(RetrievedChunk(
+            text=p.get("text", ""),
+            score=float(r.score),
+            doc_id=p.get("doc_id"),
+            source=p.get("source"),
+            metadata=p.get("metadata")
+        ))
+    return QueryResponse(chunks=chunks)
+
+@app.get("/healthz")
+async def health():
+    return {"status": "ok"}

@@ -1,0 +1,66 @@
+version: "3.9"
+
+x-common-env: &common_env
+  OLLAMA_HOST: "http://ollama:11434"
+  OLLAMA_EMBED_MODEL: "nomic-embed-text"   # good default; alternatives: bge-m3, mxbai-embed-large
+  QDRANT_URL: "http://qdrant:6333"
+  QDRANT_COLLECTION: "docs"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "printf '' >/dev/tcp/127.0.0.1/11434"]
+      interval: 30s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 20
+
+  rag_api:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    image: rag-only-api:latest
+    container_name: rag-only-api
+    restart: unless-stopped
+    depends_on:
+      - ollama
+      - qdrant
+    environment:
+      <<: *common_env
+      # QDRANT_API_KEY: "optional-if-you-enable-auth-in-qdrant"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/healthz"]
+      interval: 20s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  ollama_models:
+  qdrant_storage:
