@@ -1,0 +1,25 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main  # Or 'master', depending on your default branch
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest  # This should match a label on your Gitea Runner
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build Docker image
+        id: build-image
+        run: |
+          IMAGE_TAG=$(date +%Y%m%d%H%M%S)-${GITEA_SHA:0:7}
+          docker build -t 10.20.10.28:5000/bram/rag-only:${IMAGE_TAG} -t 10.20.10.28:5000/bram/rag-only:latest .
+          echo "::set-output name=image_tag::${IMAGE_TAG}"
+        
+      - name: Push Docker image
+        run: |
+          docker push 10.20.10.28:5000/bram/rag-only:latest
+          docker push 10.20.10.28:5000/bram/rag-only:${{ steps.build-image.outputs.image_tag }}
