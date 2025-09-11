@@ -34,22 +34,22 @@ services:
     volumes:
       - ollama_models:/root/.ollama
 
-#  qdrant:
-#    image: qdrant/qdrant:latest
-#    container_name: qdrant
-#    restart: unless-stopped
-#    ports:
-#      - "6333:6333"
-#      - "6334:6334"
-#    volumes:
-#      - qdrant_storage:/qdrant/storage
-#    environment:
-#      QDRANT__SERVICE__GRPC_PORT: 6334
-#    healthcheck:
-#      test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
-#      interval: 120s
-#      timeout: 30s
-#      retries: 20
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
+      interval: 120s
+      timeout: 30s
+      retries: 20
 
 #  rag_api:
 #    image: docker.io/weitzman535/rag-only:latest
