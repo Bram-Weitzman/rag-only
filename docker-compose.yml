@@ -31,6 +31,8 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
     volumes:
       - ollama_models:/root/.ollama
 
@@ -47,6 +49,7 @@ services:
       QDRANT__SERVICE__GRPC_PORT: 6334
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      #test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
       interval: 120s
       timeout: 30s
       retries: 20
