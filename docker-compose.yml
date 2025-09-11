@@ -48,7 +48,8 @@ services:
     environment:
       QDRANT__SERVICE__GRPC_PORT: 6334
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      test: ["CMD-SHELL", "nc -z localhost 6333 || exit 1"]
+      #test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
       #test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
       interval: 120s
       timeout: 30s
