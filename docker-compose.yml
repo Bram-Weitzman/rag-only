@@ -47,32 +47,32 @@ services:
       - qdrant_storage:/qdrant/storage
     environment:
       QDRANT__SERVICE__GRPC_PORT: 6334
-    healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 6333 || exit 1"]
-      #test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      #test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 120s
-      timeout: 30s
-      retries: 20
-
-#  rag_api:
-#    image: docker.io/weitzman535/rag-only:latest
-#    container_name: rag-only-api
-#    restart: unless-stopped
-#    depends_on:
-#      ollama-pull:
-#        condition: service_completed_successfully
-#      qdrant:
-#        condition: service_healthy
-#    environment:
-#      <<: *common_env
-#    ports:
-#      - "8000:8000"
 #    healthcheck:
-#      test: ["CMD", "wget", "-qO-", "http://localhost:8000/healthz"]
+#      test: ["CMD-SHELL", "nc -z localhost 6333 || exit 1"]
+      #test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      #test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
 #      interval: 120s
 #      timeout: 30s
 #      retries: 20
+
+  rag_api:
+    image: docker.io/weitzman535/rag-only:latest
+    container_name: rag-only-api
+    restart: unless-stopped
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_healthy
+    environment:
+      <<: *common_env
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/healthz"]
+      interval: 120s
+      timeout: 30s
+      retries: 20
 
 volumes:
   ollama_models:
