@@ -42,24 +42,24 @@ services:
       retries: 20
 
   rag_api:
-    image: 10.20.10.28:5000/bram/rag-only-api:latest
+    image: docker.io/weitzman535/rag-only:latest # <-- THIS LINE IS CHANGED
     container_name: rag-only-api
     restart: unless-stopped
-    depends_on:
-      ollama:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
+#    depends_on:
+#      ollama:
+#        condition: service_healthy
+#      qdrant:
+#        condition: service_healthy
     environment:
       <<: *common_env
       # QDRANT_API_KEY: "optional-if-you-enable-auth-in-qdrant"
     ports:
       - "8000:8000"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8000/healthz"]
-      interval: 20s
-      timeout: 5s
-      retries: 20
+#    healthcheck:
+#      test: ["CMD", "wget", "-qO-", "http://localhost:8000/healthz"]
+#      interval: 20s
+#      timeout: 5s
+#      retries: 20
 
 volumes:
   ollama_models:
