@@ -1,0 +1,27 @@
+# A name for your workflow
+name: CI Build and Test
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push events to the main branch
+  push:
+    branches: [ "main" ]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs
+jobs:
+  # The "build" job
+  build:
+    # This is the key part: tell it to use your runner
+    runs-on: self-hosted
+
+    # Steps represent a sequence of tasks that will be executed
+    steps:
+      # Step 1: Checks out your repository under $GITHUB_WORKSPACE
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      # Step 2: A simple test command to verify the runner works
+      - name: List files in repository
+        run: ls -la
