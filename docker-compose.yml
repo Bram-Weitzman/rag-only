@@ -50,24 +50,24 @@ services:
       timeout: 5s
       retries: 20
 
-  rag_api:
-    image: docker.io/weitzman535/rag-only:latest
-    container_name: rag-only-api
-    restart: unless-stopped
-    depends_on:
-      ollama-pull:
-        condition: service_completed_successfully
-      qdrant:
-        condition: service_healthy
-    environment:
-      <<: *common_env
-    ports:
-      - "8000:8000"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8000/healthz"]
-      interval: 20s
-      timeout: 5s
-      retries: 20
+#  rag_api:
+#    image: docker.io/weitzman535/rag-only:latest
+#    container_name: rag-only-api
+#    restart: unless-stopped
+#    depends_on:
+#      ollama-pull:
+#        condition: service_completed_successfully
+#      qdrant:
+#        condition: service_healthy
+#    environment:
+#      <<: *common_env
+#    ports:
+#      - "8000:8000"
+#    healthcheck:
+#      test: ["CMD", "wget", "-qO-", "http://localhost:8000/healthz"]
+#      interval: 20s
+#      timeout: 5s
+#      retries: 20
 
 volumes:
   ollama_models:
