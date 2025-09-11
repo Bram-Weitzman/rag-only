@@ -1,5 +1,5 @@
 name: Build and Push Docker Image to Docker Hub
-#11:46
+#11:48
 on:
   push:
     branches: [ "main" ]
@@ -29,4 +29,4 @@ jobs:
           context: ./app
           push: true
           # Use the correct image name that matches your GitHub repo
-          tags: docker.io/Bram-Weitzman/rag-only:latest
+          tags: docker.io/bram-weitzman/rag-only:latest
