@@ -42,7 +42,7 @@ services:
       retries: 20
 
   rag_api:
-    image: Bram-Weitzman/rag-only-api:latest # <-- THIS LINE IS CHANGED
+    image: docker.io/Bram-Weitzman/rag-only-api:latest # <-- THIS LINE IS CHANGED
     container_name: rag-only-api
     restart: unless-stopped
     depends_on:
