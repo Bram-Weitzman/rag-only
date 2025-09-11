@@ -27,7 +27,7 @@ services:
   ollama-pull:
     image: ollama/ollama:latest
     container_name: ollama-pull
-    command: ollama pull nomic-embed-text
+    command: pull nomic-embed-text
     depends_on:
       ollama:
         condition: service_healthy
@@ -46,7 +46,7 @@ services:
     environment:
       QDRANT__SERVICE__GRPC_PORT: 6334
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
       interval: 120s
       timeout: 30s
       retries: 20
