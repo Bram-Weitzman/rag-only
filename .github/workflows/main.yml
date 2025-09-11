@@ -32,7 +32,6 @@ jobs:
           tags: docker.io/weitzman535/rag-only:latest
                 docker.io/weitzman535/rag-only:${{ github.sha }}
 
-steps:
       - name: Check out code
         uses: actions/checkout@v4
 
