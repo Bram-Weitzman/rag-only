@@ -18,7 +18,7 @@ services:
     volumes:
       - ollama_models:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:11434/api/version"]
+      test: ["CMD", "wget", "-fsS", "http://localhost:11434/api/version"]
       interval: 120s
       timeout: 30s
       retries: 20
