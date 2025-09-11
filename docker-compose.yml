@@ -24,15 +24,15 @@ services:
       timeout: 5s
       retries: 20
 
-#  ollama-pull:
-#    image: ollama/ollama:latest
-#    container_name: ollama-pull
-#    command: ollama pull nomic-embed-text
-#    depends_on:
-#      ollama:
-#        condition: service_healthy
-#    volumes:
-#      - ollama_models:/root/.ollama
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: ollama-pull
+    command: ollama pull nomic-embed-text
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_models:/root/.ollama
 
 #  qdrant:
 #    image: qdrant/qdrant:latest
