@@ -1,5 +1,5 @@
-name: Build and Push Docker Image to Docker Hub
-#11:48
+name: Test, Build, and Push Docker Image
+
 on:
   push:
     branches: [ "main" ]
@@ -13,6 +13,17 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r app/requirements.txt
+
+      - name: Run tests with pytest
+        run: pytest app/tests/
+      
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -25,23 +36,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          # Build from the 'app' directory where your Dockerfile is
           context: ./app
           push: true
-          # Use the correct image name that matches your GitHub repo
-          tags: docker.io/weitzman535/rag-only:latest
-                docker.io/weitzman535/rag-only:${{ github.sha }}
-
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install -r app/requirements.txt
-
-      - name: Run tests with pytest
-        run: pytest app/tests/
+          tags: |
+            docker.io/weitzman535/rag-only:latest
+            docker.io/weitzman535/rag-only:${{ github.sha }}
