@@ -62,8 +62,8 @@ services:
     depends_on:
       ollama-pull:
         condition: service_completed_successfully
-      qdrant:
-        condition: service_healthy
+#      qdrant:
+#        condition: service_healthy
     environment:
       <<: *common_env
     ports:
