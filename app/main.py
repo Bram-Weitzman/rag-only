@@ -54,7 +54,7 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
                 return [data["embedding"]]
             else:
                 # This is the line that was being incorrectly triggered
-                raise HTTPException(502, f"Unexpected Ollama embeddings response format: {data}")
+                raise HTTPException(502, f"Unexpected Ollama embeddings Response format: {data}")
 
         except httpx.RequestError as e:
             raise HTTPException(503, f"Could not connect to Ollama: {e}")
