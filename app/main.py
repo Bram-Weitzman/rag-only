@@ -1,3 +1,4 @@
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -20,6 +21,19 @@ API_ENDPOINT = f"{OLLAMA_HOST}/api/embeddings"
 
 # --- FastAPI ---
 app = FastAPI(title="RAG-only API", version="1.0")
+origins = [
+    "http://10.20.10.3", # The origin of your web server
+    "http://localhost",  # Optional: for local testing
+    "http://localhost:8000", # Optional: for local testing
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"], # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"], # Allows all headers
+)
 
 # --- Qdrant client ---
 client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
