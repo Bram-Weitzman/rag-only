@@ -4,7 +4,7 @@ x-common-env: &common_env
   OLLAMA_HOST: "http://ollama:11434"
   OLLAMA_EMBED_MODEL: "nomic-embed-text"
   QDRANT_URL: "http://qdrant:6333"
-  QDRANT_COLLECTION: "docs"
+  QDRANT_COLLECTION: "isc2_toronto_v3"
 
 services:
   ollama:
