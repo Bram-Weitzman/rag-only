@@ -5,8 +5,10 @@ from uuid import uuid4
 import os
 import math
 import httpx
+import logging
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+
 
 # --- env ---
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant:6333")
@@ -23,22 +25,58 @@ app = FastAPI(title="RAG-only API", version="1.0")
 client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 
 # --- helpers ---
+
+# --- helpers ---
+import logging # Use standard logging or loguru
+
 async def embed_texts(texts: List[str]) -> List[List[float]]:
     """Call Ollama embeddings endpoint once for a batch of texts."""
-    # Ollama embeddings API (2025): POST /api/embeddings {model, input}
-    payload = {"model": EMBED_MODEL, "input": texts}
+    # Note: For simplicity, this example sends the first text.
+    # A full implementation might loop or use a different payload structure if
+    # the API supports batching under a different key.
+    payload = {"model": EMBED_MODEL, "prompt": texts[0]}
+
     async with httpx.AsyncClient(timeout=60) as http:
-        r = await http.post(f"{OLLAMA_HOST}/api/embeddings", json=payload)
-        if r.status_code != 200:
-            raise HTTPException(502, f"Ollama embed error: {r.text[:200]}")
-        data = r.json()
+        try:
+            r = await http.post(f"{OLLAMA_HOST}/api/embeddings", json=payload)
+            r.raise_for_status() # Raise an exception for non-200 responses
+
+            data = r.json()
+
+            # --- DEBUGGING STEP ---
+            # Log the actual response from Ollama to see its structure
+            logging.info(f"Ollama response received: {data}")
+
+            # --- THE FIX ---
+            # Check for the correct singular 'embedding' key
+            if "embedding" in data:
+                # The function expects List[List[float]], so we wrap the result in a list
+                return [data["embedding"]]
+            else:
+                # This is the line that was being incorrectly triggered
+                raise HTTPException(502, f"Unexpected Ollama embeddings response format: {data}")
+
+        except httpx.RequestError as e:
+            raise HTTPException(503, f"Could not connect to Ollama: {e}")
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(502, f"Ollama embed error: {e.response.text[:200]}")
+
+#async def embed_texts(texts: List[str]) -> List[List[float]]:
+#    """Call Ollama embeddings endpoint once for a batch of texts."""
+    # Ollama embeddings API (2025): POST /api/embeddings {model, input}
+#    payload = {"model": EMBED_MODEL, "input": texts}
+#    async with httpx.AsyncClient(timeout=60) as http:
+#        r = await http.post(f"{OLLAMA_HOST}/api/embeddings", json=payload)
+#        if r.status_code != 200:
+#            raise HTTPException(502, f"Ollama embed error: {r.text[:200]}")
+#        data = r.json()
         # shape can be {"embeddings":[...]} or {"data":[{"embedding":[...]}...]} depending on version
-        if "embeddings" in data:
-            return data["embeddings"]
-        elif "data" in data:
-            return [d["embedding"] for d in data["data"]]
-        else:
-            raise HTTPException(502, "Unexpected Ollama embeddings response")
+#        if "embeddings" in data:
+#            return data["embeddings"]
+#        elif "data" in data:
+#            return [d["embedding"] for d in data["data"]]
+#        else:
+#            raise HTTPException(502, "Unexpected Ollama embeddings response")
 
 def ensure_collection(vector_size: int):
     exists = client.collection_exists(COLLECTION)
