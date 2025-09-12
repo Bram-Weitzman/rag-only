@@ -14,6 +14,7 @@ QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY")  # optional
 COLLECTION = os.environ.get("QDRANT_COLLECTION", "docs")
 EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434").rstrip("/")
+API_ENDPOINT = f"{OLLAMA_HOST}/api/embeddings"
 
 # --- FastAPI ---
 app = FastAPI(title="RAG-only API", version="1.0")
