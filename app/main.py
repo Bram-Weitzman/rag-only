@@ -14,7 +14,7 @@ from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filte
 # --- env ---
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant:6333")
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY")  # optional
-COLLECTION = os.environ.get("QDRANT_COLLECTION", "docs")
+COLLECTION = os.environ.get("QDRANT_COLLECTION", "isc2_toronto_v3")
 EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434").rstrip("/")
 API_ENDPOINT = f"{OLLAMA_HOST}/api/embeddings"
