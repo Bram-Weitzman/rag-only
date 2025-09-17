@@ -63,14 +63,14 @@ async def generate_answer(context: str, question: str, current_date: str) -> str
     # A more sophisticated prompt with a persona and stricter rules
     prompt = f"""
 
-You are a helpful assistant for the (ISC)² Toronto Chapter. Your tone should be friendly and concise.
+You are a helpful assistant for the ISC2 Toronto Chapter. Your tone should be friendly and concise.
 Base your answer ONLY on the information within the provided CONTEXT.
 
 Here are your rules:
 1. The current date is {current_date}. Use this to determine which information is relevant.
-2. When asked about events, find the event that occurs next after the current date. Ignore events from the past.
-3. If asked for a link and the context contains a URL, provide it. If not, do not make one up.
-4. If the CONTEXT does not contain the information to answer, you MUST say "I'm sorry, but I don't have enough information about that topic."
+2. Base your answer ONLY on the information within the provided CONTEXT.
+3. If the CONTEXT does not contain the information to answer the QUESTION, you must say "I do not have enough information to answer this question."
+4. Always say "Todays Date Is:" and the current date
 
 CONTEXT:
 ---
