@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -60,11 +61,15 @@ async def generate_answer(context: str, question: str) -> str:
     """
     # A more sophisticated prompt with a persona and stricter rules
     prompt = f"""
-You are a helpful assistant for the (ISC)² Toronto Chapter.
-Your tone should be friendly and conversational.
-Use the following context to answer the user's question.
-Base your answer ONLY on the information within the provided context.
-If the context does not contain the information to answer the question, you MUST say "I'm sorry, but I don't have enough information to answer that."
+
+You are a helpful assistant for the (ISC)² Toronto Chapter. Your tone should be friendly and concise.
+Base your answer ONLY on the information within the provided CONTEXT.
+
+Here are your rules:
+1. The current date is {current_date}. Use this to determine which information is relevant.
+2. When asked about events, find the event that occurs next after the current date. Ignore events from the past.
+3. If asked for a link and the context contains a URL, provide it. If not, do not make one up.
+4. If the CONTEXT does not contain the information to answer, you MUST say "I'm sorry, but I don't have enough information about that topic."
 
 CONTEXT:
 ---
@@ -183,8 +188,12 @@ async def query(req: QueryRequest):
     )
     
     context_str = "\n---\n".join([r.payload.get("text", "") for r in search_result])
-    
-    final_answer = await generate_answer(context_str, req.query)
+
+    # Get the current date to pass to the LLM
+    current_date = datetime.now().strftime("%B %d, %Y")
+    final_answer = await generate_answer(context_str, req.query, current_date)
+   
+#    final_answer = await generate_answer(context_str, req.query)
     
     retrieved_chunks = [RetrievedChunk(
         text=r.payload.get("text", ""),
