@@ -174,7 +174,9 @@ async def ingest(req: IngestRequest):
                 "metadata": item.metadata or {},
                 "chunk_ix": idx
             })
-            ids.append(f"{base_doc_id}-{idx}")
+            # --- THE FIX ---
+            # Generate a new, valid UUID for each chunk
+            ids.append(str(uuid4()))
     if not texts:
         return IngestResponse(inserted_points=0)
 
