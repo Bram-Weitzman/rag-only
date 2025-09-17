@@ -1,0 +1,259 @@
+import os, re, json, time, hashlib, html, urllib.parse, itertools
+from typing import List, Dict, Any, Optional, Tuple
+import tldextract
+import requests
+from bs4 import BeautifulSoup, Tag
+from tenacity import retry, stop_after_attempt, wait_exponential
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, VectorParams, PointStruct, OptimizersConfigDiff, PayloadSchemaType, TextIndexParams, TextIndexType
+from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+import xxhash
+
+QDRANT_URL = os.getenv("QDRANT_URL", "http://10.20.10.23:6333")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://10.20.10.23:11434")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
+COLLECTION = os.getenv("QDRANT_COLLECTION", "isc2_toronto_v2")
+ALIAS = os.getenv("QDRANT_ALIAS", "isc2_active")
+START_URL = os.getenv("START_URL", "https://isc2chapter-toronto.ca")
+SITEMAP_URL = os.getenv("SITEMAP_URL", f"{START_URL}/sitemap.xml")
+ALLOWED_PATH_REGEX = os.getenv("ALLOWED_PATH_REGEX", r"^/(events|blog|about|team|membership|join|contact|volunteer|news|chapters|resources|pricing|fees|leadership|board|officers|sponsors|faq)(/|$)|^/$")
+USER_AGENT = os.getenv("UA", "ISC2-Indexer/1.0 (+bot self-hosted)")
+
+SESSION = requests.Session()
+SESSION.headers.update({"User-Agent": USER_AGENT, "Accept":"text/html,application/xhtml+xml"})
+
+def domain_root(url:str)->str:
+    e=tldextract.extract(url); return f"{e.domain}.{e.suffix}"
+
+ROOT_DOMAIN = domain_root(START_URL)
+
+def normalize_url(url:str)->str:
+    u=urllib.parse.urlsplit(url)
+    if not u.scheme: return urllib.parse.urlunsplit(("https", u.netloc or urllib.parse.urlsplit(START_URL).netloc, u.path, u.query, u.fragment))
+    return urllib.parse.urlunsplit((u.scheme.lower(), u.netloc.lower(), re.sub(r"/{2,}","/",u.path or "/"), u.query, u.fragment))
+
+def same_site(u:str)->bool:
+    return domain_root(u)==ROOT_DOMAIN
+
+def allowed_path(u:str)->bool:
+    p=urllib.parse.urlsplit(u).path or "/"
+    return re.search(ALLOWED_PATH_REGEX, p or "/") is not None
+
+def iter_sitemap_links()->List[str]:
+    try:
+        r=SESSION.get(SITEMAP_URL, timeout=20)
+        if r.ok and "<urlset" in r.text:
+            soup=BeautifulSoup(r.text, "xml")
+            return [normalize_url(loc.text.strip()) for loc in soup.select("url > loc")]
+    except Exception: pass
+    return []
+
+def crawl(start: str)->List[str]:
+    q=[normalize_url(start)]
+    seen=set()
+    out=set()
+    while q:
+        u=q.pop(0)
+        if u in seen: continue
+        seen.add(u)
+        try:
+            r=SESSION.get(u, timeout=20)
+            ct=r.headers.get("content-type","")
+            if not r.ok or "text/html" not in ct: continue
+            out.add(u)
+            soup=BeautifulSoup(r.text, "lxml")
+            for a in soup.find_all("a", href=True):
+                uu=normalize_url(urllib.parse.urljoin(u, a["href"]))
+                if same_site(uu) and allowed_path(uu) and "#" not in uu:
+                    if uu not in seen: q.append(uu)
+        except Exception:
+            continue
+    return sorted(out)
+
+def text_of(node:Tag)->str:
+    # preserve list/table spacing a bit better
+    for br in node.find_all(["br"]): br.replace_with("\n")
+    for code in node.find_all(["code","pre"]):
+        code.string = (code.get_text("\n") or "").strip()
+    txt=node.get_text("\n", strip=True)
+    txt=re.sub(r"\n{3,}", "\n\n", txt)
+    return txt
+
+def heading_path(h:Tag)->str:
+    path=[]
+    cur=h
+    while cur:
+        if isinstance(cur, Tag) and re.fullmatch(r"h[1-6]", cur.name or ""):
+            t=cur.get_text(" ", strip=True)
+            if t: path.append(t)
+        cur=cur.find_previous(lambda x: isinstance(x, Tag) and re.fullmatch(r"h[1-6]", x.name or ""), limit=1)
+        if not cur: break
+    return " > ".join(reversed(path)) if path else ""
+
+def split_into_semantic_chunks(soup:BeautifulSoup)->List[Dict[str,Any]]:
+    # Strategy:
+    # - Walk top-level sections/cards (section, article, div.card, main)
+    # - Inside each, split by headings (h1..h6)
+    # - Keep tables and definition lists intact
+    # - Drop nav/footer/aside
+    for bad in soup.find_all(["nav","footer","aside","script","style","noscript"]):
+        bad.decompose()
+
+    # Prefer main if exists
+    roots = soup.select("main") or [soup.body or soup]
+
+    chunks=[]
+    for root in roots:
+        blocks=root.find_all(["section","article","div","li","tbody","table"], recursive=True)
+        # fallback: whole body
+        if not blocks: blocks=[root]
+
+        for blk in blocks:
+            # Require some real text
+            txt = text_of(blk)
+            if len(txt) < 120:  # skip tiny blocks
+                continue
+
+            # find nearest heading in this block or above
+            h = None
+            for cand in itertools.chain(
+                blk.find_all(re.compile(r"^h[1-6]$"), recursive=True),
+                [blk.find_previous(re.compile(r"^h[1-6]$"))]
+            ):
+                if cand:
+                    h = cand; break
+
+            h_txt = h.get_text(" ", strip=True) if h else ""
+            h_path = heading_path(h) if h else ""
+
+            # heuristics: classify kind
+            kind="generic"
+            lower = (h_txt + " " + txt[:400]).lower()
+            if re.search(r"\b(member(ship)?|join|fee|price|pricing|dues)\b", lower): kind="membership"
+            elif re.search(r"\b(event|meetup|webinar|talk|speaker|rsvp|register)\b", lower): kind="event"
+            elif re.search(r"\b(team|board|officer|leadership|director|committee)\b", lower): kind="roles"
+            elif re.search(r"\b(sponsor|partner)\b", lower): kind="sponsors"
+            elif re.search(r"\b(blog|news|post|article)\b", lower): kind="blog"
+
+            # extract signals
+            prices = re.findall(r"(\$[0-9][0-9,]*)(?:\s*/\s*(year|yr|month|mo|annual))?", txt, flags=re.I)
+            roles = re.findall(r"(President|Vice[-\s]?President|Treasurer|Secretary|Director|Chair|Co[-\s]?Chair|Coordinator|Lead)", txt, flags=re.I)
+            dates = re.findall(r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t\.?|tember)|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},\s+\d{4}\b", txt)
+
+            # chunk
+            chunks.append({
+                "heading": h_txt,
+                "h_path": h_path,
+                "text": txt,
+                "kind": kind,
+                "signals": {
+                    "prices": [" ".join(p).strip() for p in prices] if prices else [],
+                    "roles": list(dict.fromkeys([r.title() for r in roles])) if roles else [],
+                    "dates": dates or [],
+                }
+            })
+    # dedupe very-similar chunks by hash of text
+    seen=set(); uniq=[]
+    for c in chunks:
+        h=xxhash.xxh64(c["text"]).hexdigest()
+        if h in seen: continue
+        seen.add(h)
+        c["text_hash"]=h
+        uniq.append(c)
+    return uniq
+
+@retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=1, min=1, max=10))
+def embed_batch(texts:List[str])->List[List[float]]:
+    r=requests.post(f"{OLLAMA_HOST}/api/embed", json={"model": EMBED_MODEL, "input": texts}, timeout=120)
+    r.raise_for_status()
+    js=r.json()
+    # Ollama returns {"embeddings": [[...], [...]]} or {"data":[{"embedding":[...]}]} depending on version
+    if "embeddings" in js:
+        return js["embeddings"]
+    if "data" in js:
+        return [d["embedding"] for d in js["data"]]
+    raise RuntimeError("Unexpected embed response")
+
+def ensure_collection(client:QdrantClient, dim:int):
+    exists = client.get_collection(COLLECTION) if COLLECTION in [c.name for c in client.get_collections().collections] else None
+    if not exists:
+        client.recreate_collection(
+            collection_name=COLLECTION,
+            vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
+            optimizers_config=OptimizersConfigDiff(memmap_threshold=20000, indexing_threshold=20000)
+        )
+        # text index for payload fields we’ll filter on
+        client.create_payload_index(COLLECTION, "kind", field_schema=PayloadSchemaType.Keyword)
+        client.create_payload_index(COLLECTION, "h_path", field_schema=TextIndexParams(type=TextIndexType.Text))
+        client.create_payload_index(COLLECTION, "url", field_schema=PayloadSchemaType.Keyword)
+
+def main():
+    base_list = set(iter_sitemap_links())
+    if not base_list:
+        base_list = set(crawl(START_URL))
+    # apply path allow filter
+    pages = sorted([u for u in base_list if allowed_path(u)])
+
+    print(f"[SCRAPER] pages to fetch: {len(pages)}")
+    points=[]
+    all_chunks=0
+
+    for url in pages:
+        try:
+            r=SESSION.get(url, timeout=30)
+            if not r.ok or "text/html" not in r.headers.get("content-type",""):
+                continue
+            soup=BeautifulSoup(r.text, "lxml")
+            title = (soup.title.get_text(" ", strip=True) if soup.title else "")
+            chunks = split_into_semantic_chunks(soup)
+            if not chunks: continue
+            all_chunks+=len(chunks)
+
+            texts=[c["text"] for c in chunks]
+            vecs=embed_batch(texts)
+            if not vecs: continue
+            dim=len(vecs[0])
+
+            # lazy init collection (first page)
+            if not points:
+                client=QdrantClient(QDRANT_URL)
+                ensure_collection(client, dim)
+
+            for c, v in zip(chunks, vecs):
+                pid = xxhash.xxh64(f"{url}::{c['text_hash']}").intdigest()
+                points.append(PointStruct(
+                    id=pid,
+                    vector=v,
+                    payload={
+                        "url": url,
+                        "title": title,
+                        "heading": c["heading"],
+                        "h_path": c["h_path"],
+                        "kind": c["kind"],
+                        "signals": c["signals"],
+                        "text": c["text"],
+                        "html_hash": xxhash.xxh64(r.text).hexdigest(),
+                        "ts": int(time.time())
+                    }
+                ))
+
+        except Exception as e:
+            print("[WARN]", url, e)
+            continue
+
+        # upsert in batches
+        if len(points) >= 256:
+            QdrantClient(QDRANT_URL).upsert(COLLECTION, points=points)
+            points.clear()
+
+    if points:
+        QdrantClient(QDRANT_URL).upsert(COLLECTION, points=points)
+        points.clear()
+
+    # point alias → new collection (atomic swap for Rasa)
+    client=QdrantClient(QDRANT_URL)
+    client.create_alias(collection_name=COLLECTION, alias_name=ALIAS, force=True)
+    print(f"[DONE] Indexed {all_chunks} chunks across {len(pages)} pages → collection={COLLECTION}, alias={ALIAS}")
+
+if __name__=="__main__":
+    main()

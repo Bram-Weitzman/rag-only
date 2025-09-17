@@ -1,39 +1,31 @@
-# Stage 1: The builder stage, where we install dependencies
+# Stage 1: The builder stage
 FROM python:3.11-slim as builder
 
-# Set the working directory
 WORKDIR /app
 
-# Create and activate a virtual environment
 ENV VIRTUAL_ENV=/app/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Copy and install requirements first to leverage Docker layer caching
-COPY requirements.txt .
+# CHANGED: Copy requirements.txt from the 'app' subdirectory
+COPY app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ---
 
-# Stage 2: The final stage, which creates the lean production image
+# Stage 2: The final stage
 FROM python:3.11-slim
 
-# Set the same working directory
 WORKDIR /app
 
-# Copy the virtual environment from the builder stage
 COPY --from=builder /app/venv /app/venv
 
-# Copy your application code into the container
-COPY . .
+# CHANGED: Copy your application code from the 'app' subdirectory
+COPY app/ .
 
-# Activate the virtual environment for the final container
 ENV PATH="/app/venv/bin:$PATH"
 
-# Expose the port your application runs on (e.g., 8000 for FastAPI/Uvicorn)
 EXPOSE 8000
 
-# The command to run your application
-# Replace "main:app" with the actual entrypoint of your Python app
-# For example, if you run `uvicorn main:app --host 0.0.0.0 --port 8000`
+# This command should still work because we copied everything into the WORKDIR
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
