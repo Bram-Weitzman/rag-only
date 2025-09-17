@@ -27,6 +27,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 20
+      start_period: 10m
 
   # Pulls the embedding model
   ollama-pull-embed:
