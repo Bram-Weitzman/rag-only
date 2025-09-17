@@ -71,7 +71,7 @@ Question: {question}
         "stream": False  # Get the full response at once
     }
     
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=300) as client:
         try:
             response = await client.post(f"{OLLAMA_HOST}/api/generate", json=payload)
             response.raise_for_status()
