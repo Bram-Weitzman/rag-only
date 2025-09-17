@@ -1,4 +1,5 @@
 version: "3.9"
+#keep alive
 
 x-common-env: &common_env
   OLLAMA_HOST: "http://ollama:11434"
@@ -12,6 +13,7 @@ services:
   # Main Ollama server for all models
   ollama:
     image: ollama/ollama:latest
+    command: serve phi3
     container_name: ollama
     restart: unless-stopped
     ports:
