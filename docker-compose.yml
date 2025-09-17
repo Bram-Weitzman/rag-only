@@ -1,5 +1,5 @@
 version: "3.9"
-
+#revert
 x-common-env: &common_env
   OLLAMA_HOST: "http://ollama:11434"
   OLLAMA_EMBED_MODEL: "nomic-embed-text"
