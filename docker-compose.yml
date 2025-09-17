@@ -10,7 +10,7 @@ x-common-env: &common_env
 services:
   ollama:
     image: ollama/ollama:latest
-    command: serve phi3
+    command: serve tinyllama
     container_name: ollama
     restart: unless-stopped
     ports:
@@ -42,7 +42,7 @@ services:
   ollama-pull-llm:
     image: ollama/ollama:latest
     container_name: ollama-pull-llm
-    command: pull phi3
+    command: pull tinyllama
     depends_on:
       ollama:
         condition: service_healthy
