@@ -55,7 +55,7 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
 
 # in app/main.py
 
-async def generate_answer(context: str, question: str) -> str:
+async def generate_answer(context: str, question: str, current_date: str) -> str:
     """
     Sends the retrieved context and a question to the LLM to generate an answer.
     """
