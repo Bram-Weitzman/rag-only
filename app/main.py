@@ -52,30 +52,46 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Ollama embed error: {e.response.text[:200]}")
 
-async def generate_answer(context: str, question: str) -> str:
-    """Sends retrieved context and a question to the LLM to generate an answer."""
-    prompt = f"""
-Use the following context to answer the question.
-If the context does not contain the answer, say that you don't have enough information to answer.
+# in app/main.py
 
-Context:
+async def generate_answer(context: str, question: str) -> str:
+    """
+    Sends the retrieved context and a question to the LLM to generate an answer.
+    """
+    # A more sophisticated prompt with a persona and stricter rules
+    prompt = f"""
+You are a helpful assistant for the (ISC)² Toronto Chapter.
+Your tone should be friendly and conversational.
+Use the following context to answer the user's question.
+Base your answer ONLY on the information within the provided context.
+If the context does not contain the information to answer the question, you MUST say "I'm sorry, but I don't have enough information to answer that."
+
+CONTEXT:
 ---
 {context}
 ---
 
-Question: {question}
+QUESTION: {question}
 """
-    payload = {"model": LLM_MODEL, "prompt": prompt, "stream": False}
-    try:
-        async with httpx.AsyncClient(timeout=300) as client:
+
+    payload = {
+        "model": LLM_MODEL,
+        "prompt": prompt,
+        "stream": False
+    }
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        try:
             response = await client.post(f"{OLLAMA_HOST}/api/generate", json=payload)
             response.raise_for_status()
             result = response.json()
-            return result.get("response", "Error: No response from LLM.")
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"Could not connect to Ollama for generation: {e}")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=502, detail=f"Ollama generate error: {e.response.text}")
+            return result.get("response", "Error: No response from LLM.").strip()
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=503, detail=f"Could not connect to Ollama: {e}")
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=502, detail=f"Ollama generate error: {e.response.text}")
+
+
 
 def ensure_collection(vector_size: int):
     """Creates the Qdrant collection if it doesn't exist."""
