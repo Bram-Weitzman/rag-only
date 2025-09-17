@@ -45,7 +45,7 @@ import logging # Use standard logging or loguru
 
 # --- Add this new helper function somewhere in your helpers section ---
 
-LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "tinyllama")
+LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "phi3")
 
 async def generate_answer(context: str, question: str) -> str:
     """
