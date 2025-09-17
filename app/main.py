@@ -136,7 +136,7 @@ class RetrievedChunk(BaseModel):
 
 class QueryResponse(BaseModel):
     answer: str
-    chunks: List[RetrievedChunk]
+#    chunks: List[RetrievedChunk] #outputs source chuncks
 
 # --- API Endpoints ---
 @app.on_event("startup")
@@ -193,8 +193,8 @@ async def query(req: QueryRequest):
         source=r.payload.get("source")
     ) for r in search_result]
     
-    return QueryResponse(answer=final_answer, chunks=retrieved_chunks)
-
+    #return QueryResponse(answer=final_answer, chunks=retrieved_chunks) #return includes chuncks / sources
+    return QueryResponse(answer=final_answer)
 @app.get("/healthz")
 async def health():
     return {"status": "ok"}
