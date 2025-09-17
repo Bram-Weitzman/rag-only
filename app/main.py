@@ -43,6 +43,45 @@ client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 # --- helpers ---
 import logging # Use standard logging or loguru
 
+# --- Add this new helper function somewhere in your helpers section ---
+
+LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "phi3")
+
+async def generate_answer(context: str, question: str) -> str:
+    """
+    Sends the retrieved context and a question to the LLM to generate an answer.
+    """
+    # Create a prompt for the LLM
+    prompt = f"""
+Use the following context to answer the question.
+If the context does not contain the answer, say that you don't have enough information to answer.
+
+Context:
+---
+{context}
+---
+
+Question: {question}
+"""
+    
+    # Payload for the Ollama generate endpoint
+    payload = {
+        "model": LLM_MODEL,
+        "prompt": prompt,
+        "stream": False  # Get the full response at once
+    }
+    
+    async with httpx.AsyncClient(timeout=60) as client:
+        try:
+            response = await client.post(f"{OLLAMA_HOST}/api/generate", json=payload)
+            response.raise_for_status()
+            result = response.json()
+            return result.get("response", "Error: No response from LLM.")
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=503, detail=f"Could not connect to Ollama: {e}")
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=502, detail=f"Ollama generate error: {e.response.text}")
+
 async def embed_texts(texts: List[str]) -> List[List[float]]:
     """Call Ollama embeddings endpoint once for a batch of texts."""
     # Note: For simplicity, this example sends the first text.
@@ -147,6 +186,7 @@ class RetrievedChunk(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 class QueryResponse(BaseModel):
+    answer: str
     chunks: List[RetrievedChunk]
 
 # --- startup: infer vector size once via a tiny embed ---
@@ -191,6 +231,51 @@ async def ingest(req: IngestRequest):
 
 @app.post("/query", response_model=QueryResponse)
 async def query(req: QueryRequest):
+    # 1. Embed the user's query
+    qvec = (await embed_texts([req.query]))[0]
+
+    # 2. Build the Qdrant filter
+    flt = None
+    conditions = []
+    if req.filter_by_source:
+        conditions.append(FieldCondition(key="source", match=MatchValue(value=req.filter_by_source)))
+    if req.filter_by_doc_id:
+        conditions.append(FieldCondition(key="doc_id", match=MatchValue(value=req.filter_by_doc_id)))
+    if conditions:
+        flt = Filter(must=conditions)
+
+    # 3. Perform the search in Qdrant
+    search_result = client.search(
+        collection_name=COLLECTION,
+        query_vector=qvec,
+        limit=max(1, min(req.top_k, 50)),
+        with_payload=True,
+        query_filter=flt
+    )
+
+    # 4. Format the retrieved chunks and create a context string
+    retrieved_chunks = []
+    context_str = ""
+    for r in search_result:
+        p = r.payload or {}
+        chunk_text = p.get("text", "")
+        context_str += chunk_text + "\n---\n"
+        retrieved_chunks.append(RetrievedChunk(
+            text=chunk_text,
+            score=float(r.score),
+            doc_id=p.get("doc_id"),
+            source=p.get("source"),
+            metadata=p.get("metadata")
+        ))
+        
+    # 5. Generate the final answer using the LLM
+    final_answer = await generate_answer(context_str, req.query)
+
+    # 6. Return the final answer and the source chunks
+    return QueryResponse(answer=final_answer, chunks=retrieved_chunks)
+
+"""@app.post("/query", response_model=QueryResponse)
+async def query(req: QueryRequest):
     qvec = (await embed_texts([req.query]))[0]
 
     flt = None
@@ -222,7 +307,7 @@ async def query(req: QueryRequest):
             metadata=p.get("metadata")
         ))
     return QueryResponse(chunks=chunks)
-
+"""
 @app.get("/healthz")
 async def health():
     return {"status": "ok"}
