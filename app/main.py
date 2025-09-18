@@ -61,10 +61,10 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
 
 async def generate_answer(context: str, question: str, current_date: str) -> str:
      """
-    Sends retrieved context and a question to the LLM to generate a direct answer.
-    This prompt is hyper-focused on accuracy for small models.
-    """
-    prompt = f"""
+     Sends retrieved context and a question to the LLM to generate a direct answer.
+     This prompt is hyper-focused on accuracy for small models.
+     """
+     prompt = f"""
 You are a factual answering assistant.
 Your sole task is to answer the user's QUESTION based strictly on the provided CONTEXT.
 - If the CONTEXT contains the information to answer the QUESTION, provide a concise answer based only on that context.
