@@ -4,8 +4,8 @@ x-common-env: &common_env
   OLLAMA_HOST: "http://ollama:11434"
   OLLAMA_EMBED_MODEL: "nomic-embed-text"
   # Variable for the new reasoning LLM
-  OLLAMA_LLM_MODEL: "phi3"
-  #OLLAMA_LLM_MODEL: "tinyllama"
+  #OLLAMA_LLM_MODEL: "phi3"
+  OLLAMA_LLM_MODEL: "tinyllama"
   QDRANT_URL: "http://qdrant:6333"
   QDRANT_COLLECTION: "isc2_toronto_v3"
 
@@ -44,8 +44,8 @@ services:
   ollama-pull-llm:
     image: ollama/ollama:latest
     container_name: ollama-pull-llm
-    command: pull phi3
-    #command: pull tinyllama
+    #command: pull phi3
+    command: pull tinyllama
     depends_on:
       ollama:
         condition: service_healthy
