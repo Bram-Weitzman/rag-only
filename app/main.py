@@ -1,4 +1,3 @@
-from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -14,19 +13,15 @@ from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filte
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant:6333")
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY")
 COLLECTION = os.environ.get("QDRANT_COLLECTION", "isc2_toronto_v3")
-
 EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
-#LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "tinyllama")
-#LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "phi3")
-LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "deepseek-coder:1.3b")
-
+LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "tinyllama")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434").rstrip("/")
 
 # --- FastAPI App ---
 app = FastAPI(title="RAG API v3", version="1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allows all origins for simplicity in development
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,10 +33,9 @@ client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 # --- Helper Functions ---
 async def embed_texts(texts: List[str]) -> List[List[float]]:
     """Generates embeddings for a list of texts using the Ollama API."""
-    # Note: This simple version embeds one text at a time.
-    # For batching, the payload structure and loop would need to be adjusted.
     try:
         async with httpx.AsyncClient(timeout=300) as http_client:
+            # Note: A robust implementation would loop and batch texts. This sends the first.
             response = await http_client.post(
                 f"{OLLAMA_HOST}/api/embeddings",
                 json={"model": EMBED_MODEL, "prompt": texts[0]},
@@ -57,34 +51,25 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Ollama embed error: {e.response.text[:200]}")
 
-# in app/main.py
-
-async def generate_answer(context: str, question: str, current_date: str) -> str:
+async def generate_answer(context: str, question: str) -> str:
     """
     Sends retrieved context and a question to the LLM to generate a direct answer.
     This prompt is hyper-focused on accuracy for small models.
     """
     prompt = f"""
-You are a factual answering assistant.
 Your function is to answer the [QUESTION] using only the provided [CONTEXT].
 You must not use any other information.
 If the [CONTEXT] is empty or does not contain the answer, you must respond with the exact phrase: "The provided information does not contain an answer to that question."
 
-
-CONTEXT:
----
+[CONTEXT]
 {context}
----
 
-QUESTION: {question}
+[QUESTION]
+{question}
 """
-
-    payload = {
-        "model": LLM_MODEL,
-        "prompt": prompt,
-        "stream": False
-    }
-
+    
+    payload = {"model": LLM_MODEL, "prompt": prompt, "stream": False}
+    
     async with httpx.AsyncClient(timeout=300) as client:
         try:
             response = await client.post(f"{OLLAMA_HOST}/api/generate", json=payload)
@@ -92,11 +77,9 @@ QUESTION: {question}
             result = response.json()
             return result.get("response", "Error: No response from LLM.").strip()
         except httpx.RequestError as e:
-            raise HTTPException(status_code=503, detail=f"Could not connect to Ollama: {e}")
+            raise HTTPException(status_code=503, detail=f"Could not connect to Ollama for generation: {e}")
         except httpx.HTTPStatusError as e:
             raise HTTPException(status_code=502, detail=f"Ollama generate error: {e.response.text}")
-
-
 
 def ensure_collection(vector_size: int):
     """Creates the Qdrant collection if it doesn't exist."""
@@ -141,7 +124,7 @@ class RetrievedChunk(BaseModel):
 
 class QueryResponse(BaseModel):
     answer: str
-#    chunks: List[RetrievedChunk] #outputs source chuncks
+    # chunks: List[RetrievedChunk] # We removed this for a cleaner response
 
 # --- API Endpoints ---
 @app.on_event("startup")
@@ -161,7 +144,7 @@ async def ingest(req: IngestRequest):
         for idx, chunk in enumerate(chunks):
             texts.append(chunk)
             payloads.append({"doc_id": base_doc_id, "source": item.source, "chunk_ix": idx})
-            ids.append(str(uuid4())) # Generate a valid UUID for each chunk
+            ids.append(str(uuid4()))
     if not texts:
         return IngestResponse(inserted_points=0)
     
@@ -188,22 +171,14 @@ async def query(req: QueryRequest):
     )
     
     context_str = "\n---\n".join([r.payload.get("text", "") for r in search_result])
-
-    # Get the current date to pass to the LLM
-    current_date = datetime.now().strftime("%B %d, %Y")
-    final_answer = await generate_answer(context_str, req.query, current_date)
-   
-    final_answer = await generate_answer(context_str, req.query) #for debugging
     
-    retrieved_chunks = [RetrievedChunk(
-        text=r.payload.get("text", ""),
-        score=r.score,
-        doc_id=r.payload.get("doc_id"),
-        source=r.payload.get("source")
-    ) for r in search_result]
+    final_answer = await generate_answer(context_str, req.query)
     
-    #return QueryResponse(answer=final_answer, chunks=retrieved_chunks) #return includes chuncks / sources
+    # We are not returning the chunks in the final response
+    # retrieved_chunks = [RetrievedChunk(...) for r in search_result]
+    
     return QueryResponse(answer=final_answer)
+
 @app.get("/healthz")
 async def health():
     return {"status": "ok"}
