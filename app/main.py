@@ -66,10 +66,9 @@ async def generate_answer(context: str, question: str, current_date: str) -> str
     """
     prompt = f"""
 You are a factual answering assistant.
-Your sole task is to answer the user's QUESTION based strictly on the provided CONTEXT.
-- If the CONTEXT contains the information to answer the QUESTION, provide a concise answer based only on that context.
-- If the CONTEXT does not contain the information, you MUST respond with the exact phrase: "I do not have enough information to answer this question."
-
+Your function is to answer the [QUESTION] using only the provided [CONTEXT].
+You must not use any other information.
+If the [CONTEXT] is empty or does not contain the answer, you must respond with the exact phrase: "The provided information does not contain an answer to that question."
 
 
 CONTEXT:
@@ -194,7 +193,7 @@ async def query(req: QueryRequest):
     current_date = datetime.now().strftime("%B %d, %Y")
     final_answer = await generate_answer(context_str, req.query, current_date)
    
-#    final_answer = await generate_answer(context_str, req.query)
+    final_answer = await generate_answer(context_str, req.query) #for debugging
     
     retrieved_chunks = [RetrievedChunk(
         text=r.payload.get("text", ""),
