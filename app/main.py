@@ -60,18 +60,17 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
 # in app/main.py
 
 async def generate_answer(context: str, question: str, current_date: str) -> str:
+     """
+    Sends retrieved context and a question to the LLM to generate a direct answer.
+    This prompt is hyper-focused on accuracy for small models.
     """
-    Sends the retrieved context and a question to the LLM to generate an answer.
-    """
-    # A more sophisticated prompt with a persona and stricter rules
     prompt = f"""
+You are a factual answering assistant.
+Your sole task is to answer the user's QUESTION based strictly on the provided CONTEXT.
+- If the CONTEXT contains the information to answer the QUESTION, provide a concise answer based only on that context.
+- If the CONTEXT does not contain the information, you MUST respond with the exact phrase: "I do not have enough information to answer this question."
 
-You are a helpful assistant for the ISC2 Toronto Chapter. 
-Your tone should be friendly and concise.
-Base your answer ONLY on the information within the provided CONTEXT.
-The current date is {current_date}. 
-If the CONTEXT does not contain the information to answer the QUESTION, you must say "I do not have enough information to answer this question."
-Always say "Todays Date Is:" and the current date
+
 
 CONTEXT:
 ---
