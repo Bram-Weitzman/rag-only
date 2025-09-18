@@ -15,8 +15,8 @@ QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant:6333")
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY")
 COLLECTION = os.environ.get("QDRANT_COLLECTION", "isc2_toronto_v3")
 EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
-LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "tinyllama")
-#LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "phi3")
+#LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "tinyllama")
+LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "phi3")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434").rstrip("/")
 
 # --- FastAPI App ---
