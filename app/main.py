@@ -60,23 +60,29 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
 # in app/main.py
 
 async def generate_answer(context: str, question: str, current_date: str) -> str:
+#async def generate_answer(context: str, question: str) -> str:
     """
     Sends retrieved context and a question to the LLM to generate a direct answer.
-    This prompt is hyper-focused on accuracy for small models.
+    This prompt is structured as a code function to be more effective with coder models.
     """
     prompt = f"""
-You are a factual answering assistant.
-Your function is to answer the [QUESTION] using only the provided [CONTEXT].
-You must not use any other information.
-If the [CONTEXT] is empty or does not contain the answer, you must respond with the exact phrase: "The provided information does not contain an answer to that question."
+'''
+Function: get_answer_from_context
+Description: Extracts an answer from the 'context' based on the 'question'.
 
+Parameters:
+- context (string): The only source of information for the answer.
+- question (string): The user's query.
 
-CONTEXT:
----
-{context}
----
-
-QUESTION: {question}
+Returns:
+- (string): A concise answer derived strictly from the context. If the context is insufficient, this function MUST return the exact string "I do not have enough information to answer this question."
+'''
+# --- Function Execution ---
+# Input:
+# context = "{context}"
+# question = "{question}"
+#
+# Output:
 """
 
     payload = {
