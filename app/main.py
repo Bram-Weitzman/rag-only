@@ -89,7 +89,6 @@ QUESTION: {question}
 def ensure_collection(vector_size: int):
     """Creates the Qdrant collection if it doesn't exist."""
     if not client.collection_exists(COLLECTION):
-        # Use the modern client.create_collection method
         client.create_collection(
             collection_name=COLLECTION,
             vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
