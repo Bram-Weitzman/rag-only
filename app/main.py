@@ -89,13 +89,21 @@ QUESTION: {question}
 def ensure_collection(vector_size: int):
     """Creates the Qdrant collection if it doesn't exist."""
     if not client.collection_exists(COLLECTION):
-        client.recreate_collection(
+        # Use the modern client.create_collection method
+        client.create_collection(
             collection_name=COLLECTION,
             vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
         )
         client.create_payload_index(COLLECTION, field_name="doc_id", field_schema="keyword")
 
-# --- (Other helper functions like chunk_text can remain here) ---
+def chunk_text(text: str, max_tokens: int = 400, overlap: int = 60) -> List[str]:
+    """A simple text chunking function."""
+    words = text.split()
+    if not words: return []
+    step = max_tokens - overlap
+    if step <= 0: step = max_tokens
+    chunks = [" ".join(words[i:i + max_tokens]) for i in range(0, len(words), step)]
+    return [chunk for chunk in chunks if chunk]
 
 # --- Pydantic Models ---
 class IngestItem(BaseModel):
@@ -134,7 +142,22 @@ async def startup():
 
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest(req: IngestRequest):
-    # ... (ingest function logic) ...
+    """Ingests text into the Qdrant database."""
+    texts, payloads, ids = [], [], []
+    for item in req.items:
+        base_doc_id = item.doc_id or str(uuid4())
+        chunks = chunk_text(item.text)
+        for idx, chunk in enumerate(chunks):
+            texts.append(chunk)
+            payloads.append({"doc_id": base_doc_id, "source": item.source, "chunk_ix": idx})
+            ids.append(str(uuid4()))
+    if not texts:
+        return IngestResponse(inserted_points=0)
+    
+    vectors = await embed_texts(texts)
+    points = [PointStruct(id=ids[i], vector=vectors[i], payload={**payloads[i], "text": texts[i]}) for i in range(len(texts))]
+    client.upsert(collection_name=COLLECTION, points=points)
+    return IngestResponse(inserted_points=len(points))
 
 @app.post("/query", response_model=QueryResponse)
 async def query(req: QueryRequest):
