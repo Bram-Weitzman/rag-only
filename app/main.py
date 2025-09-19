@@ -14,13 +14,13 @@ from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filte
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant:6333")
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY")
 COLLECTION = os.environ.get("QDRANT_COLLECTION", "isc2_toronto_v3")
-
 EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
-#LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "tinyllama")
-#LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "phi3")
-LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "deepseek-coder:1.3b")
-
+LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "phi3")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434").rstrip("/")
+
+# --- AI Prompt Configuration (Add these lines) ---
+DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant. Please answer the question based on the context."
+SYSTEM_PROMPT = os.environ.get("LLM_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT)
 
 # --- FastAPI App ---
 app = FastAPI(title="RAG API v3", version="1.0")
@@ -57,32 +57,20 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Ollama embed error: {e.response.text[:200]}")
 
-# in app/main.py
-
-async def generate_answer(context: str, question: str, current_date: str) -> str:
-#async def generate_answer(context: str, question: str) -> str:
+async def generate_answer(context: str, question: str) -> str:
     """
     Sends retrieved context and a question to the LLM to generate a direct answer.
-    This prompt is structured as a code function to be more effective with coder models.
+    The system prompt is loaded from the environment.
     """
-    prompt = f"""
-'''
-Function: get_answer_from_context
-Description: Extracts an answer from the 'context' based on the 'question'.
+    # Build the prompt dynamically using the system prompt from the .env file
+    prompt = f"""{SYSTEM_PROMPT}
 
-Parameters:
-- context (string): The only source of information for the answer.
-- question (string): The user's query.
+CONTEXT:
+---
+{context}
+---
 
-Returns:
-- (string): A concise answer derived strictly from the context. If the context is insufficient, this function MUST return the exact string "I do not have enough information to answer this question."
-'''
-# --- Function Execution ---
-# Input:
-# context = "{context}"
-# question = "{question}"
-#
-# Output:
+QUESTION: {question}
 """
 
     payload = {

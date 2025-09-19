@@ -6,7 +6,7 @@ x-common-env: &common_env
   # Variable for the new reasoning LLM
   #OLLAMA_LLM_MODEL: "phi3"
   #OLLAMA_LLM_MODEL: "tinyllama"
-  OLLAMA_LLM_MODEL: "deepseek-coder:1.3b"
+  OLLAMA_LLM_MODEL: "${OLLAMA_LLM_MODEL}"
   QDRANT_URL: "http://qdrant:6333"
   QDRANT_COLLECTION: "isc2_toronto_v3"
 
@@ -47,7 +47,7 @@ services:
     container_name: ollama-pull-llm
     #command: pull phi3
     #command: pull tinyllama
-    command: pull deepseek-coder:1.3b
+    command: pull ${OLLAMA_LLM_MODEL}
     depends_on:
       ollama:
         condition: service_healthy
