@@ -261,6 +261,25 @@ def split_into_semantic_chunks(soup: BeautifulSoup) -> List[Dict[str, Any]]:
         uniq.append(c)
     return uniq
 
+# -----------------------  Chunk by Sentance --------------------------------------------
+def chunk_by_sentence(text: str) -> List[Dict[str, Any]]:
+    """A simple chunker that splits text by sentences."""
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    chunks = []
+    for sentence in sentences:
+        # Skip empty strings that can result from the split
+        if not sentence.strip():
+            continue
+            
+        # We create a dictionary structure similar to the old chunker for compatibility
+        chunk_data = {
+            "text": sentence.strip(),
+            "text_hash": xxhash.xxh64(sentence.strip()).hexdigest()
+        }
+        chunks.append(chunk_data)
+    return chunks
+# ----------------------- End of Chunk by Sentance --------------------------------------
+
 # ------------------------- Embeddings (sub-batches + progress) -------------------------
 @retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=1, min=1, max=10))
 def _embed_once(texts: List[str]) -> List[List[float]]:
@@ -548,7 +567,7 @@ def main() -> None:
     target_pages = [
         "https://isc2chapter-toronto.ca/",
 #        "https://isc2chapter-toronto.ca/blogs/",
-        "https://isc2chapter-toronto.ca/media/",
+#        "https://isc2chapter-toronto.ca/media/",
         "https://isc2chapter-toronto.ca/events/",
 #        "https://isc2chapter-toronto.ca/partnerships-and-sponsorships/",
         "https://isc2chapter-toronto.ca/leadership/",

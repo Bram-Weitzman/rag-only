@@ -59,20 +59,15 @@ async def generate_answer(context: str, question: str, current_date: str) -> str
     """Sends retrieved context and a question to the LLM to generate a sophisticated answer."""
     prompt = f"""{SYSTEM_PROMPT}
 
-Here are your rules:
-1. The current date is {current_date}. Use this to determine which information is relevant.
-2. When asked about events, find the event that occurs next after the current date. Ignore events from the past.
-3. If asked for a link and the context contains a URL, provide it. If not, do not make one up.
-4. If the CONTEXT does not contain the information to answer, you MUST say "I'm sorry, but I don't have enough information about that topic."
+[CURRENT DATE]
+{current_date}
 
-CONTEXT:
----
+[CONTEXT]
 {context}
----
 
-QUESTION: {question}
-"""
-    
+[QUESTION]
+{question}
+"""    
     payload = {"model": LLM_MODEL, "prompt": prompt, "stream": False}
     
     async with httpx.AsyncClient(timeout=300) as client:
