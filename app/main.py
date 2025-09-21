@@ -26,7 +26,7 @@ SYSTEM_PROMPT = os.environ.get("LLM_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT)
 app = FastAPI(title="RAG API v3", version="1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://weitzman.info"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
