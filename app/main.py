@@ -1,5 +1,5 @@
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from uuid import uuid4
@@ -9,6 +9,7 @@ import httpx
 import logging
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+import csv
 
 # --- Environment Variables ---
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant:6333")
@@ -17,6 +18,24 @@ COLLECTION = os.environ.get("QDRANT_COLLECTION", "isc2_toronto_v3")
 EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "phi3")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434").rstrip("/")
+
+# --- Logging Configuration ---
+LOG_DIR = "/app/logs"
+LOG_FILE = os.path.join(LOG_DIR, "query_log.csv")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+logger = logging.getLogger("query_logger")
+logger.setLevel(logging.INFO)
+# Prevent duplicate logs if the script is reloaded
+if not logger.handlers:
+    handler = logging.FileHandler(LOG_FILE)
+    # This format just combines the timestamp and the message, separated by a comma
+    formatter = logging.Formatter('%(asctime)s,%(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.addHandler(logging.StreamHandler())
+# --------------------------------------
+
 
 # --- AI Prompt Configuration ---
 DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant. Please answer the question based on the context."
@@ -154,8 +173,13 @@ async def ingest(req: IngestRequest):
     return IngestResponse(inserted_points=len(points))
 
 @app.post("/query", response_model=QueryResponse)
-async def query(req: QueryRequest):
+async def query(req: QueryRequest, request: Request):
+    logger.info(f"{req.query}")
     """Performs RAG to answer a query."""
+    client_ip = request.client.host # <-- Get the user's IP address
+    
+    # We format the message with quotes to create a valid CSV row
+    logger.info(f'"{client_ip}","{req.query}"')
     qvec = (await embed_texts([req.query]))[0]
     
     query_filter = None

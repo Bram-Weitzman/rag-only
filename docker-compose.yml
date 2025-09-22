@@ -83,6 +83,8 @@ services:
     ports:
       # Port 8001 to avoid conflict with v2
       - "8001:8000"
+    volumes:
+      - ./logs:/app/logs
 
 volumes:
   ollama_models:
