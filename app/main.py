@@ -20,20 +20,23 @@ LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "phi3")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434").rstrip("/")
 
 # --- Logging Configuration ---
-LOG_DIR = "/app/logs"
-LOG_FILE = os.path.join(LOG_DIR, "query_log.csv")
-os.makedirs(LOG_DIR, exist_ok=True)
+CSV_LOG_FILE = "/app/logs/query_log.csv"
 
-logger = logging.getLogger("query_logger")
-logger.setLevel(logging.INFO)
-# Prevent duplicate logs if the script is reloaded
-if not logger.handlers:
-    handler = logging.FileHandler(LOG_FILE)
-    # This format just combines the timestamp and the message, separated by a comma
-    formatter = logging.Formatter('%(asctime)s,%(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.addHandler(logging.StreamHandler())
+def log_query_to_csv(ip: str, query: str, answer: str):
+    """Logs the query, answer, and IP to a CSV file."""
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(CSV_LOG_FILE), exist_ok=True)
+    
+    # Check if the file is new, so we can write the header row
+    file_exists = os.path.isfile(CSV_LOG_FILE)
+    
+    with open(CSV_LOG_FILE, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["timestamp", "client_ip", "query", "answer"]) # Write header
+        
+        # Write the data row
+        writer.writerow([datetime.now().isoformat(), ip, query, answer])
 # --------------------------------------
 
 
@@ -178,8 +181,6 @@ async def query(req: QueryRequest, request: Request):
     """Performs RAG to answer a query."""
     client_ip = request.client.host # <-- Get the user's IP address
     
-    # We format the message with quotes to create a valid CSV row
-    logger.info(f'"{client_ip}","{req.query}"')
     qvec = (await embed_texts([req.query]))[0]
     
     query_filter = None
@@ -199,6 +200,9 @@ async def query(req: QueryRequest, request: Request):
     current_date = datetime.now().strftime("%B %d, %Y")
     final_answer = await generate_answer(context_str, req.query, current_date)
     
+    # Log the query AND the answer right before we send it back
+    log_query_to_csv(client_ip, req.query, final_answer)
+
     retrieved_chunks = [RetrievedChunk(
         text=r.payload.get("text", ""),
         score=r.score,
