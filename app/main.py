@@ -177,7 +177,6 @@ async def ingest(req: IngestRequest):
 
 @app.post("/query", response_model=QueryResponse)
 async def query(req: QueryRequest, request: Request):
-    logger.info(f"{req.query}")
     """Performs RAG to answer a query."""
     client_ip = request.client.host # <-- Get the user's IP address
     
