@@ -1,40 +1,50 @@
 # ingest_local.py
 import requests
 import os
+import csv
 
 # --- Configuration ---
 API_ENDPOINT = "http://10.20.10.30:8001/ingest"
-FILE_PATH = "./data-docs/Event_ISC2-Toronto_2025-09-25.txt"
+CSV_FILE_PATH = "./data-docs/manual_data.csv"
+
+
+# --- Helper Functions ---
+def ingest_row(row):
+    """Send a single row to the ingest API."""
+    payload = {
+        "items": [
+            {
+                "text": row["text_content"],
+                "doc_id": row["doc_id"],
+                "source": row["source_url"]
+            }
+        ]
+    }
+
+    try:
+        response = requests.post(API_ENDPOINT, json=payload, timeout=120)
+        response.raise_for_status()
+        print(f"[SUCCESS] Ingested doc_id: {row['doc_id']}")
+    except Exception as e:
+        print(f"[ERROR] Failed to ingest doc_id: {row['doc_id']}. Error: {e}")
 
 
 # --- Main script ---
 if __name__ == "__main__":
     try:
-        print(f"Reading content from {FILE_PATH}...")
-        with open(FILE_PATH, 'r', encoding='utf-8') as f:
-            text_content = f.read()
+        print(f"Reading CSV content from {CSV_FILE_PATH}...")
+        with open(CSV_FILE_PATH, 'r', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile, delimiter='\t')
+            if reader.fieldnames != ["doc_id", "text_content", "source_url", "ingest_keep"]:
+                raise ValueError("CSV file must have columns: doc_id, text_content, source_url, ingest_keep")
 
-        # Use the filename as the document ID
-        doc_id = os.path.basename(FILE_PATH)
-
-        payload = {
-            "items": [
-                {
-                    "text": text_content,
-                    "doc_id": doc_id,
-                    "source": "curated_text_file"
-                }
-            ]
-        }
-
-        print(f"Sending content to the ingest API at {API_ENDPOINT}...")
-        response = requests.post(API_ENDPOINT, json=payload, timeout=120)
-        response.raise_for_status()  # Raise an exception for bad status codes (like 4xx or 5xx)
-
-        print("\nIngestion successful!")
-        print(response.json())
+            for row in reader:
+                if row["ingest_keep"].strip().lower() == "true":
+                    ingest_row(row)
+                else:
+                    print(f"[SKIP] Skipped doc_id: {row['doc_id']} (ingest_keep is False)")
 
     except FileNotFoundError:
-        print(f"\nError: File not found at '{FILE_PATH}'. Make sure you are in the 'isc2-scraper' directory.")
+        print(f"\nError: File not found at '{CSV_FILE_PATH}'. Make sure the file exists.")
     except Exception as e:
         print(f"\nAn error occurred: {e}")
