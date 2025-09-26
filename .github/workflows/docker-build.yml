@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - v3-development
+      - v3b-data-management
 
 jobs:
   build-and-push:
