@@ -10,6 +10,7 @@ import logging
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 import csv
+import uuid  # Add this import for UUID generation
 
 # --- Environment Variables ---
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant:6333")
@@ -121,6 +122,10 @@ def chunk_text(text: str, max_tokens: int = 400, overlap: int = 60) -> List[str]
     chunks = [" ".join(words[i:i + max_tokens]) for i in range(0, len(words), step)]
     return [chunk for chunk in chunks if chunk]
 
+def generate_deterministic_id(namespace: str, text: str) -> str:
+    """Generates a deterministic UUIDv5 based on a namespace and text."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{namespace}:{text}"))
+
 # --- Pydantic Models ---
 class IngestItem(BaseModel):
     text: str
@@ -158,21 +163,22 @@ async def startup():
 
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest(req: IngestRequest):
-    """Ingests text into the Qdrant database."""
+    """Ingests text into the Qdrant database with update functionality."""
     texts, payloads, ids = [], [], []
     for item in req.items:
         base_doc_id = item.doc_id or str(uuid4())
         chunks = chunk_text(item.text)
         for idx, chunk in enumerate(chunks):
+            deterministic_id = generate_deterministic_id(base_doc_id, chunk)
             texts.append(chunk)
             payloads.append({"doc_id": base_doc_id, "source": item.source, "chunk_ix": idx})
-            ids.append(str(uuid4()))
+            ids.append(deterministic_id)
     if not texts:
         return IngestResponse(inserted_points=0)
     
     vectors = await embed_texts(texts)
     points = [PointStruct(id=ids[i], vector=vectors[i], payload={**payloads[i], "text": texts[i]}) for i in range(len(texts))]
-    client.upsert(collection_name=COLLECTION, points=points)
+    client.upsert(collection_name=COLLECTION, points=points)  # Upsert ensures updates
     return IngestResponse(inserted_points=len(points))
 
 @app.post("/query", response_model=QueryResponse)
