@@ -4,7 +4,7 @@ import os
 import csv
 
 # --- Configuration ---
-API_ENDPOINT = "http://10.20.10.30:8001/ingest"
+API_ENDPOINT = "http://10.20.10.32:8001/ingest"
 CSV_FILE_PATH = "./data-docs/manual_data.csv"
 
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     try:
         print(f"Reading CSV content from {CSV_FILE_PATH}...")
         with open(CSV_FILE_PATH, 'r', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile, delimiter='\t')
+            reader = csv.DictReader(csvfile, delimiter=',')
             if reader.fieldnames != ["doc_id", "text_content", "source_url", "ingest_keep"]:
                 raise ValueError("CSV file must have columns: doc_id, text_content, source_url, ingest_keep")
 
